@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import subprocess
 import pandas as pd
@@ -13,12 +14,14 @@ st.caption(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # INSTALL PLAYWRIGHT BROWSER
+# Use sys.executable so we always use the correct Python/playwright
+# regardless of PATH — this fixes FileNotFoundError on Streamlit Cloud
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
 def install_browser():
     result = subprocess.run(
-        ["playwright", "install", "chromium"],
+        [sys.executable, "-m", "playwright", "install", "chromium"],
         capture_output=True,
         text=True,
     )
@@ -29,7 +32,7 @@ with st.spinner("Setting up browser (first run ~60 sec) …"):
     rc, out, err = install_browser()
 
 if rc != 0:
-    st.error("❌ Browser install failed. Full output below:")
+    st.error("❌ Browser install failed:")
     st.code(f"STDOUT:\n{out}\n\nSTDERR:\n{err}")
     st.stop()
 
@@ -107,7 +110,7 @@ if uploaded_file and not st.session_state.processed:
         st.stop()
 
     st.dataframe(df)
-    st.info(f"✅ {len(df)} records loaded.")
+    st.info(f"✅ {len(df)} records loaded. Click Start Fetching to begin.")
 
     if st.button("▶ Start Fetching", type="primary"):
         from playwright.sync_api import sync_playwright
