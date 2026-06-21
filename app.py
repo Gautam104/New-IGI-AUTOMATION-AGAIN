@@ -4,9 +4,6 @@ import subprocess
 import pandas as pd
 import streamlit as st
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="IGI Diamond Automation", layout="wide")
 st.title("💎 IGI Diamond Automation")
 st.caption(
@@ -15,22 +12,25 @@ st.caption(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# INSTALL PLAYWRIGHT BROWSER ONCE
-# playwright==1.49.0 is pinned in requirements.txt because newer versions
-# need libasound2t64 which is not available on Streamlit Cloud's Debian Bullseye.
-# os.system("playwright install chromium") runs without root - user-level install.
+# INSTALL PLAYWRIGHT BROWSER
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
 def install_browser():
-    rc = os.system("playwright install chromium")
-    return rc == 0
+    result = subprocess.run(
+        ["playwright", "install", "chromium"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, result.stdout, result.stderr
+
 
 with st.spinner("Setting up browser (first run ~60 sec) …"):
-    ready = install_browser()
+    rc, out, err = install_browser()
 
-if not ready:
-    st.error("Browser install failed. Please reboot the app from Streamlit Cloud dashboard.")
+if rc != 0:
+    st.error("❌ Browser install failed. Full output below:")
+    st.code(f"STDOUT:\n{out}\n\nSTDERR:\n{err}")
     st.stop()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,17 +103,17 @@ if uploaded_file and not st.session_state.processed:
     df = pd.read_excel(uploaded_file)
 
     if "LG Number" not in df.columns:
-        st.error("❌ Column 'LG Number' not found. The header must be exactly 'LG Number'.")
+        st.error("❌ Column 'LG Number' not found. Header must be exactly 'LG Number'.")
         st.stop()
 
     st.dataframe(df)
-    total = len(df)
-    st.info(f"✅ {total} records loaded. Click Start Fetching to begin.")
+    st.info(f"✅ {len(df)} records loaded.")
 
     if st.button("▶ Start Fetching", type="primary"):
         from playwright.sync_api import sync_playwright
 
         results      = []
+        total        = len(df)
         progress_bar = st.progress(0)
         status_slot  = st.empty()
         cf_slot      = st.empty()
@@ -150,17 +150,14 @@ if uploaded_file and not st.session_state.processed:
                         if has_cloudflare(page):
                             st.session_state.cf_block = True
                             cf_slot.error(
-                                f"⚠️ Cloudflare challenge appeared at {cert} "
-                                f"({idx+1}/{total}). "
-                                "Wait 2-3 minutes then click Start Fetching again. "
-                                "Rows already fetched are saved below."
+                                f"⚠️ Cloudflare at {cert} ({idx+1}/{total}). "
+                                "Wait 2-3 min then click Start Fetching again."
                             )
                             break
 
                         page_text = wait_for_report(page, timeout=15000)
                         parsed    = parse_report(page_text)
 
-                        # retry once if all fields empty
                         if not parsed["Shape"] and not parsed["Carat"]:
                             time.sleep(2)
                             parsed = parse_report(page.inner_text("body"))
@@ -175,10 +172,7 @@ if uploaded_file and not st.session_state.processed:
                         })
 
                     pct = (idx + 1) / total
-                    progress_bar.progress(
-                        pct,
-                        text=f"{int(pct*100)}%  |  Processing: {cert}"
-                    )
+                    progress_bar.progress(pct, text=f"{int(pct*100)}% | {cert}")
 
                 browser.close()
 
