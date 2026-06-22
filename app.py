@@ -14,12 +14,16 @@ st.caption(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # INSTALL PLAYWRIGHT BROWSER
-# Use sys.executable so we always use the correct Python/playwright
-# regardless of PATH — this fixes FileNotFoundError on Streamlit Cloud
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
 def install_browser():
+    # Step 1: install playwright package itself first (in case pip missed it)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "playwright==1.49.0", "-q"],
+        capture_output=True,
+    )
+    # Step 2: install chromium browser binary
     result = subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
         capture_output=True,
@@ -113,6 +117,8 @@ if uploaded_file and not st.session_state.processed:
     st.info(f"✅ {len(df)} records loaded. Click Start Fetching to begin.")
 
     if st.button("▶ Start Fetching", type="primary"):
+
+        # import here — guaranteed installed by this point
         from playwright.sync_api import sync_playwright
 
         results      = []
